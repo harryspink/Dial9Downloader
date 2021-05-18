@@ -31,7 +31,7 @@ class Dial9Downloader
             printf("*** %s CALLS ***\n", strtoupper($type));
             $page = 1;
             unset($logs);
-            while(!isset($logs) || $logs['flags']['current_page'] < $logs['flags']['total_pages'])
+            while(!isset($logs) || count($logs['data']))
             {
                 $logs = $this->curlDial9('logs/historical', array('type' => $type, 'page' => $page));
                 if($logs === false)
@@ -70,13 +70,14 @@ class Dial9Downloader
                             continue;
                         }
 
-                        $path = sprintf('%s/%s', DIRECTORY, substr($call['timestamp'], 0, 10));
                         $time = str_replace(':', '-', substr($call['timestamp'], 11, 8));
-                        @mkdir($path);
-                        $file_name = sprintf('%s/%s-%s.wav', $path, $type == 'incoming' ? $call['source']['id'] : $call['destination']['id'], $time);
-                        if(file_exists($file_name) && filesize($file_name) > 0 && REMOVE == 1) {
-                            printf("Already downloaded, deleting call %d\n", $call['id']);
-                            $res = $this->curlDial9('logs/delete_recording', array('id' => $call['id']));
+                        $file_name = sprintf('backups/%s.wav', $call['id']);
+                        if(file_exists($file_name) && filesize($file_name) > 0) {
+                            printf("Already downloaded %d\n", $call['id']);
+                            if(REMOVE == 1){
+                              printf("deleting call %d\n", $call['id']);
+                              $res = $this->curlDial9('logs/delete_recording', array('id' => $call['id']));
+                            }
                         } else {
                             printf("Downloading call %d\n", $call['id']);
                             file_put_contents(
@@ -84,8 +85,9 @@ class Dial9Downloader
                                 base64_decode($recording['data']['file'])
                             );
                         }             
+                    } else {
+                      printf("* NO RECORDING\n", $call['id']);
                     }
-                    printf("* NO RECORDING\n", $call['id']);
                 }
                 $page++;
             }
@@ -95,7 +97,7 @@ class Dial9Downloader
     {
         $json = sprintf('params=%s', json_encode($params));
         $ch   = curl_init();
-        curl_setopt($ch, CURLOPT_URL, sprintf('https://manage.dial9.co.uk/api/v2/%s', $function));
+        curl_setopt($ch, CURLOPT_URL, sprintf('https://connect.dial9.co.uk/api/v2/%s', $function));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
@@ -103,14 +105,15 @@ class Dial9Downloader
         curl_setopt($ch, CURLOPT_TIMEOUT, 300);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
-        curl_setopt($ch, CURLOPT_VERBOSE, 1);
+        curl_setopt($ch, CURLOPT_VERBOSE, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER,
             array(
-                sprintf('X-Auth-Username: %s', USERNAME),
-                sprintf('X-Auth-Password: %s', PASSWORD)
+                sprintf('X-Auth-Token: %s', USERNAME),
+                sprintf('X-Auth-Secret: %s', PASSWORD)
             )
         );
         $r = curl_exec($ch);
+
         if(curl_errno($ch) !== 0) {
             printf("Curl error: %d: %s\n", curl_errno($ch), curl_error($ch));
         } else {
